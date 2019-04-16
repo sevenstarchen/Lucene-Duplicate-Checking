@@ -1,3 +1,4 @@
+package com.how2java;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -25,10 +26,13 @@ import org.apache.lucene.store.RAMDirectory;
 import org.wltea.analyzer.lucene.IKAnalyzer;
 
 public class TestLucene {
-    public static void main(String[] args) throws Exception{
+
+    public static void main(String[] args) throws Exception {
+        // 1. 准备中文分词器
         IKAnalyzer analyzer = new IKAnalyzer();
 
-        List<String> productNames =new ArrayList<>();
+        // 2. 索引
+        List<String> productNames = new ArrayList<>();
         productNames.add("飞利浦led灯泡e27螺口暖白球泡灯家用照明超亮节能灯泡转色温灯泡");
         productNames.add("飞利浦led灯泡e14螺口蜡烛灯泡3W尖泡拉尾节能灯泡暖黄光源Lamp");
         productNames.add("雷士照明 LED灯泡 e27大螺口节能灯3W球泡灯 Lamp led节能灯泡");
@@ -40,49 +44,63 @@ public class TestLucene {
         productNames.add("聚欧普照明led灯泡节能灯泡e27螺口球泡家用led照明单灯超亮光源");
         Directory index = createIndex(analyzer, productNames);
 
+        // 3. 查询器
         String keyword = "护眼带光源";
-        Query query = new QueryParser("name",analyzer).parse(keyword);
+        Query query = new QueryParser("name", analyzer).parse(keyword);
 
+        // 4. 搜索
         IndexReader reader = DirectoryReader.open(index);
         IndexSearcher searcher = new IndexSearcher(reader);
-        int numberPerPage =1000;
-        ScoreDoc[] hits = searcher.search(query,numberPerPage).scoreDocs;
+        int numberPerPage = 1000;
+        System.out.printf("当前一共有%d条数据%n",productNames.size());
+        System.out.printf("查询关键字是：\"%s\"%n",keyword);
+        ScoreDoc[] hits = searcher.search(query, numberPerPage).scoreDocs;
+
+        // 5. 显示查询结果
         showSearchResults(searcher, hits, query, analyzer);
         // 6. 关闭查询
         reader.close();
     }
-    private static Directory createIndex (IKAnalyzer analyzer, List<String> products) throws IOException{
+
+    private static void showSearchResults(IndexSearcher searcher, ScoreDoc[] hits, Query query, IKAnalyzer analyzer)
+            throws Exception {
+        System.out.println("找到 " + hits.length + " 个命中.");
+        System.out.println("序号\t匹配度得分\t结果");
+
+        SimpleHTMLFormatter simpleHTMLFormatter = new SimpleHTMLFormatter("<span style='color:red'>", "</span>");
+        Highlighter highlighter = new Highlighter(simpleHTMLFormatter, new QueryScorer(query));
+
+        for (int i = 0; i < hits.length; ++i) {
+            ScoreDoc scoreDoc= hits[i];
+            int docId = scoreDoc.doc;
+            Document d = searcher.doc(docId);
+            List<IndexableField> fields = d.getFields();
+            System.out.print((i + 1));
+            System.out.print("\t" + scoreDoc.score);
+            for (IndexableField f : fields) {
+                TokenStream tokenStream = analyzer.tokenStream(f.name(), new StringReader(d.get(f.name())));
+                String fieldContent = highlighter.getBestFragment(tokenStream, d.get(f.name()));
+                System.out.print("\t" + fieldContent);
+            }
+            System.out.println("<br>");
+        }
+    }
+
+    private static Directory createIndex(IKAnalyzer analyzer, List<String> products) throws IOException {
         Directory index = new RAMDirectory();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
-        IndexWriter writer =new IndexWriter(index,config);
+        IndexWriter writer = new IndexWriter(index, config);
 
-        for(String name : products){
-            addDoc(writer,name);
+        for (String name : products) {
+            addDoc(writer, name);
         }
         writer.close();
         return index;
     }
 
-    private  static  void  addDoc(IndexWriter w,String name)throws IOException{
+    private static void addDoc(IndexWriter w, String name) throws IOException {
         Document doc = new Document();
-        doc.add(new TextField("name",name,Field.Store.YES));
+        doc.add(new TextField("name", name, Field.Store.YES));
         w.addDocument(doc);
     }
-    private static void showSearchResults(IndexSearcher searcher, ScoreDoc[] hits, Query query, IKAnalyzer analyzer)
-            throws Exception {
-        System.out.println("找到 " + hits.length + " 个命中.");
-        System.out.println("序号\t匹配度得分\t结果");
-         for (int i=0;i<hits.length;++i){
-             ScoreDoc scoreDoc =hits[i];
-             int docId= scoreDoc.doc;
-             Document d = searcher.doc(docId);
-             List<IndexableField> fields =d.getFields();
-             System.out.print((i+1));
-             System.out.print("\t" + scoreDoc.score);
-             for(IndexableField f : fields){
-                 System.out.print("\t" + d.get(f.name()));
-                }
-             System.out.println();
-             }
-         }
 }
